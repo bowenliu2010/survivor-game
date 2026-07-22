@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#070b14" />
+    <title>Survivor Game Prototype</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <!--
+      Canvas is used for the game world so later milestones can add many moving
+      entities without creating and updating large numbers of DOM elements.
+    -->
+    <main id="game" aria-label="Survivor Game Prototype">
+      <canvas id="gameCanvas"></canvas>
+
+      <!-- This small overlay is informational only; it is not a game menu. -->
+      <header class="game-info" aria-live="polite">
+        <h1>Survivor Game Prototype</h1>
+        <p>WASD to Move</p>
+      </header>
+
+      <!-- Decorative screen-edge shading. -->
+      <div class="vignette" aria-hidden="true"></div>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>
