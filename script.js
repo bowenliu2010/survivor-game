@@ -1,4 +1,4 @@
-"use strict";
+   "use strict";
 
 console.log("Game loaded");
 
@@ -13,6 +13,9 @@ const ENEMY_RADIUS = 16;
 const ENEMY_SPEED = 90; // Pixels per second.
 const ENEMY_SPAWN_INTERVAL = 2; // Seconds.
 const MAX_ENEMIES = 20;
+const BULLET_RADIUS = 6;
+const BULLET_SPEED = 520; // Pixels per second.
+const SHOT_INTERVAL = 0.5; // Seconds.
 
 /* --------------------------------------------------------------------------
    Canvas
@@ -216,6 +219,123 @@ function drawEnemies() {
 }
 
 /* --------------------------------------------------------------------------
+   Automatic weapon and bullets
+   A bullet records its direction when fired, so its path remains straight even
+   while the target and player continue moving.
+   -------------------------------------------------------------------------- */
+
+class Bullet {
+  constructor(x, y, targetX, targetY) {
+    this.x = x;
+    this.y = y;
+    this.radius = BULLET_RADIUS;
+    this.speed = BULLET_SPEED;
+
+    const directionX = targetX - x;
+    const directionY = targetY - y;
+    const distance = Math.hypot(directionX, directionY);
+
+    this.velocityX = distance === 0 ? 0 : (directionX / distance) * this.speed;
+    this.velocityY = distance === 0 ? 0 : (directionY / distance) * this.speed;
+  }
+
+  update(deltaTime) {
+    this.x += this.velocityX * deltaTime;
+    this.y += this.velocityY * deltaTime;
+  }
+
+  isOutsideScreen() {
+    return (
+      this.x + this.radius < 0 ||
+      this.x - this.radius > viewport.width ||
+      this.y + this.radius < 0 ||
+      this.y - this.radius > viewport.height
+    );
+  }
+
+  render() {
+    const fill = context.createRadialGradient(
+      this.x - 2,
+      this.y - 2,
+      1,
+      this.x,
+      this.y,
+      this.radius
+    );
+
+    fill.addColorStop(0, "#fffde3");
+    fill.addColorStop(0.4, "#ffe85a");
+    fill.addColorStop(1, "#f2ad00");
+
+    context.save();
+    context.beginPath();
+    context.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+    context.fillStyle = fill;
+    context.shadowColor = "rgba(255, 224, 48, 0.95)";
+    context.shadowBlur = 18;
+    context.fill();
+    context.restore();
+  }
+}
+
+const bullets = [];
+let shotTimer = 0;
+
+function findNearestEnemy() {
+  let nearestEnemy = null;
+  let nearestDistanceSquared = Infinity;
+
+  for (const enemy of enemies) {
+    const distanceX = enemy.x - player.x;
+    const distanceY = enemy.y - player.y;
+    const distanceSquared = distanceX * distanceX + distanceY * distanceY;
+
+    if (distanceSquared < nearestDistanceSquared) {
+      nearestDistanceSquared = distanceSquared;
+      nearestEnemy = enemy;
+    }
+  }
+
+  return nearestEnemy;
+}
+
+function updateWeapon(deltaTime) {
+  shotTimer += deltaTime;
+
+  if (enemies.length === 0) {
+    // Keep the weapon ready without accumulating a burst during empty periods.
+    shotTimer = Math.min(shotTimer, SHOT_INTERVAL);
+    return;
+  }
+
+  if (shotTimer >= SHOT_INTERVAL) {
+    shotTimer -= SHOT_INTERVAL;
+    const target = findNearestEnemy();
+
+    if (target) {
+      bullets.push(new Bullet(player.x, player.y, target.x, target.y));
+    }
+  }
+}
+
+function updateBullets(deltaTime) {
+  for (let index = bullets.length - 1; index >= 0; index -= 1) {
+    const bullet = bullets[index];
+    bullet.update(deltaTime);
+
+    if (bullet.isOutsideScreen()) {
+      bullets.splice(index, 1);
+    }
+  }
+}
+
+function drawBullets() {
+  for (const bullet of bullets) {
+    bullet.render();
+  }
+}
+
+/* --------------------------------------------------------------------------
    Rendering
    -------------------------------------------------------------------------- */
 
@@ -224,6 +344,7 @@ function render() {
   drawBackground();
   drawGrid();
   drawEnemies();
+  drawBullets();
   drawPlayer();
 }
 
@@ -332,6 +453,8 @@ function gameLoop(currentTime) {
 
   updatePlayer(deltaTime);
   updateEnemies(deltaTime);
+  updateWeapon(deltaTime);
+  updateBullets(deltaTime);
   render();
   requestAnimationFrame(gameLoop);
 }
