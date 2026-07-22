@@ -1,4 +1,4 @@
-  "use strict";
+"use strict";
 
 console.log("Game loaded");
 
@@ -9,6 +9,10 @@ console.log("Game loaded");
 const PLAYER_RADIUS = 20;
 const PLAYER_SPEED = 260; // Pixels per second.
 const MAX_DELTA_TIME = 0.05; // Prevent large jumps after tab inactivity.
+const ENEMY_RADIUS = 16;
+const ENEMY_SPEED = 90; // Pixels per second.
+const ENEMY_SPAWN_INTERVAL = 2; // Seconds.
+const MAX_ENEMIES = 20;
 
 /* --------------------------------------------------------------------------
    Canvas
@@ -108,6 +112,110 @@ function keepPlayerInsideCanvas() {
 }
 
 /* --------------------------------------------------------------------------
+   Enemies
+   Each enemy owns its movement and rendering behavior. The shared array keeps
+   entity management simple and leaves room for later milestones to expand it.
+   -------------------------------------------------------------------------- */
+
+class Enemy {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.radius = ENEMY_RADIUS;
+    this.speed = ENEMY_SPEED;
+  }
+
+  update(deltaTime) {
+    const directionX = player.x - this.x;
+    const directionY = player.y - this.y;
+    const distance = Math.hypot(directionX, directionY);
+
+    if (distance === 0) return;
+
+    // Dividing by distance normalizes the chase direction on every frame.
+    const step = Math.min(this.speed * deltaTime, distance);
+    this.x += (directionX / distance) * step;
+    this.y += (directionY / distance) * step;
+  }
+
+  render() {
+    const fill = context.createRadialGradient(
+      this.x - 5,
+      this.y - 6,
+      2,
+      this.x,
+      this.y,
+      this.radius
+    );
+
+    fill.addColorStop(0, "#ffe3e3");
+    fill.addColorStop(0.35, "#ff5b67");
+    fill.addColorStop(1, "#ba1830");
+
+    context.save();
+    context.beginPath();
+    context.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+    context.fillStyle = fill;
+    context.shadowColor = "rgba(255, 38, 67, 0.9)";
+    context.shadowBlur = 22;
+    context.fill();
+    context.lineWidth = 2;
+    context.strokeStyle = "rgba(255, 205, 211, 0.9)";
+    context.stroke();
+    context.restore();
+  }
+}
+
+const enemies = [];
+let enemySpawnTimer = 0;
+
+function spawnEnemy() {
+  if (enemies.length >= MAX_ENEMIES) return;
+
+  const gap = 4;
+  const edge = Math.floor(Math.random() * 4);
+  let x;
+  let y;
+
+  // Place the full enemy circle beyond one randomly selected screen edge.
+  if (edge === 0) {
+    x = randomBetween(0, viewport.width);
+    y = -ENEMY_RADIUS - gap;
+  } else if (edge === 1) {
+    x = viewport.width + ENEMY_RADIUS + gap;
+    y = randomBetween(0, viewport.height);
+  } else if (edge === 2) {
+    x = randomBetween(0, viewport.width);
+    y = viewport.height + ENEMY_RADIUS + gap;
+  } else {
+    x = -ENEMY_RADIUS - gap;
+    y = randomBetween(0, viewport.height);
+  }
+
+  // The off-screen radius and gap keep the new enemy clear of the player.
+  enemies.push(new Enemy(x, y));
+}
+
+function updateEnemies(deltaTime) {
+  enemySpawnTimer += deltaTime;
+
+  if (enemySpawnTimer >= ENEMY_SPAWN_INTERVAL) {
+    enemySpawnTimer -= ENEMY_SPAWN_INTERVAL;
+    spawnEnemy();
+  }
+
+  for (const enemy of enemies) {
+    enemy.update(deltaTime);
+  }
+}
+
+function drawEnemies() {
+  for (const enemy of enemies) {
+    enemy.render();
+  }
+}
+
+/* --------------------------------------------------------------------------
    Rendering
    -------------------------------------------------------------------------- */
 
@@ -115,6 +223,7 @@ function render() {
   context.clearRect(0, 0, viewport.width, viewport.height);
   drawBackground();
   drawGrid();
+  drawEnemies();
   drawPlayer();
 }
 
@@ -222,6 +331,7 @@ function gameLoop(currentTime) {
   previousTime = currentTime;
 
   updatePlayer(deltaTime);
+  updateEnemies(deltaTime);
   render();
   requestAnimationFrame(gameLoop);
 }
@@ -234,6 +344,10 @@ function clamp(value, minimum, maximum) {
   // Small viewports can be narrower than the player's diameter.
   if (maximum < minimum) return (minimum + maximum) / 2;
   return Math.min(Math.max(value, minimum), maximum);
+}
+
+function randomBetween(minimum, maximum) {
+  return minimum + Math.random() * (maximum - minimum);
 }
 
 resizeCanvas();
