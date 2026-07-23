@@ -1,4 +1,4 @@
-   "use strict";
+ "use strict";
 
 console.log("Game loaded");
 
@@ -16,6 +16,7 @@ const MAX_ENEMIES = 20;
 const BULLET_RADIUS = 6;
 const BULLET_SPEED = 520; // Pixels per second.
 const SHOT_INTERVAL = 0.5; // Seconds.
+const HIT_FLASH_DURATION = 0.1; // Seconds.
 
 /* --------------------------------------------------------------------------
    Canvas
@@ -126,6 +127,7 @@ class Enemy {
     this.y = y;
     this.radius = ENEMY_RADIUS;
     this.speed = ENEMY_SPEED;
+    this.health = 1;
   }
 
   update(deltaTime) {
@@ -139,6 +141,11 @@ class Enemy {
     const step = Math.min(this.speed * deltaTime, distance);
     this.x += (directionX / distance) * step;
     this.y += (directionY / distance) * step;
+  }
+
+  takeHit() {
+    this.health -= 1;
+    return this.health <= 0;
   }
 
   render() {
@@ -253,6 +260,17 @@ class Bullet {
     );
   }
 
+  collidesWith(enemy) {
+    const distanceX = enemy.x - this.x;
+    const distanceY = enemy.y - this.y;
+    const combinedRadius = this.radius + enemy.radius;
+
+    return (
+      distanceX * distanceX + distanceY * distanceY <=
+      combinedRadius * combinedRadius
+    );
+  }
+
   render() {
     const fill = context.createRadialGradient(
       this.x - 2,
@@ -279,6 +297,7 @@ class Bullet {
 }
 
 const bullets = [];
+const hitFlashes = [];
 let shotTimer = 0;
 
 function findNearestEnemy() {
@@ -319,12 +338,46 @@ function updateWeapon(deltaTime) {
 }
 
 function updateBullets(deltaTime) {
-  for (let index = bullets.length - 1; index >= 0; index -= 1) {
-    const bullet = bullets[index];
+  for (let bulletIndex = bullets.length - 1; bulletIndex >= 0; bulletIndex -= 1) {
+    const bullet = bullets[bulletIndex];
     bullet.update(deltaTime);
 
     if (bullet.isOutsideScreen()) {
-      bullets.splice(index, 1);
+      bullets.splice(bulletIndex, 1);
+      continue;
+    }
+
+    // Reverse iteration makes both removals safe and prevents skipped entities.
+    for (let enemyIndex = enemies.length - 1; enemyIndex >= 0; enemyIndex -= 1) {
+      const enemy = enemies[enemyIndex];
+
+      if (!bullet.collidesWith(enemy)) continue;
+
+      hitFlashes.push({
+        x: enemy.x,
+        y: enemy.y,
+        radius: enemy.radius,
+        remaining: HIT_FLASH_DURATION,
+      });
+
+      bullets.splice(bulletIndex, 1);
+
+      if (enemy.takeHit()) {
+        enemies.splice(enemyIndex, 1);
+      }
+
+      // A bullet is consumed by its first collision only.
+      break;
+    }
+  }
+}
+
+function updateHitFlashes(deltaTime) {
+  for (let index = hitFlashes.length - 1; index >= 0; index -= 1) {
+    hitFlashes[index].remaining -= deltaTime;
+
+    if (hitFlashes[index].remaining <= 0) {
+      hitFlashes.splice(index, 1);
     }
   }
 }
@@ -332,6 +385,28 @@ function updateBullets(deltaTime) {
 function drawBullets() {
   for (const bullet of bullets) {
     bullet.render();
+  }
+}
+
+function drawHitFlashes() {
+  for (const flash of hitFlashes) {
+    const progress = 1 - flash.remaining / HIT_FLASH_DURATION;
+
+    context.save();
+    context.beginPath();
+    context.arc(
+      flash.x,
+      flash.y,
+      flash.radius * (1 + progress * 0.35),
+      0,
+      Math.PI * 2
+    );
+    context.globalAlpha = 1 - progress;
+    context.fillStyle = "#fff4f4";
+    context.shadowColor = "rgba(255, 80, 95, 0.95)";
+    context.shadowBlur = 18;
+    context.fill();
+    context.restore();
   }
 }
 
@@ -345,6 +420,7 @@ function render() {
   drawGrid();
   drawEnemies();
   drawBullets();
+  drawHitFlashes();
   drawPlayer();
 }
 
@@ -455,6 +531,7 @@ function gameLoop(currentTime) {
   updateEnemies(deltaTime);
   updateWeapon(deltaTime);
   updateBullets(deltaTime);
+  updateHitFlashes(deltaTime);
   render();
   requestAnimationFrame(gameLoop);
 }
@@ -475,3 +552,4 @@ function randomBetween(minimum, maximum) {
 
 resizeCanvas();
 requestAnimationFrame(gameLoop);
+
