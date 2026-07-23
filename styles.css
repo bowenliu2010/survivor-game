@@ -84,6 +84,13 @@ body {
   text-transform: uppercase;
 }
 
+.game-info .xp-counter {
+  margin-top: 0.45rem;
+  color: #63f2c1;
+  letter-spacing: 0.12em;
+  text-shadow: 0 0 0.7rem rgb(73 245 190 / 40%);
+}
+
 /* --------------------------------------------------------------------------
    Screen effects
    -------------------------------------------------------------------------- */

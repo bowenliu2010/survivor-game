@@ -1,4 +1,4 @@
- "use strict";
+"use strict";
 
 console.log("Game loaded");
 
@@ -17,6 +17,10 @@ const BULLET_RADIUS = 6;
 const BULLET_SPEED = 520; // Pixels per second.
 const SHOT_INTERVAL = 0.5; // Seconds.
 const HIT_FLASH_DURATION = 0.1; // Seconds.
+const XP_GEM_RADIUS = 8;
+const XP_GEM_LIFETIME = 30; // Seconds.
+const XP_COLLECTION_PADDING = 8;
+const COLLECTION_FLASH_DURATION = 0.15; // Seconds.
 
 /* --------------------------------------------------------------------------
    Canvas
@@ -26,6 +30,7 @@ const HIT_FLASH_DURATION = 0.1; // Seconds.
 
 const canvas = document.getElementById("gameCanvas");
 const context = canvas.getContext("2d");
+const xpCounter = document.getElementById("xpCounter");
 
 const viewport = {
   width: 0,
@@ -226,6 +231,99 @@ function drawEnemies() {
 }
 
 /* --------------------------------------------------------------------------
+   XP gems
+   Gems remain at their drop position until collected or their lifetime expires.
+   -------------------------------------------------------------------------- */
+
+class XPGem {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.radius = XP_GEM_RADIUS;
+    this.age = 0;
+    this.lifetime = XP_GEM_LIFETIME;
+    this.animationOffset = Math.random() * Math.PI * 2;
+  }
+
+  update(deltaTime) {
+    this.age += deltaTime;
+  }
+
+  isExpired() {
+    return this.age >= this.lifetime;
+  }
+
+  isTouchingPlayer() {
+    const distanceX = player.x - this.x;
+    const distanceY = player.y - this.y;
+    const collectionRadius =
+      player.radius + this.radius + XP_COLLECTION_PADDING;
+
+    return (
+      distanceX * distanceX + distanceY * distanceY <=
+      collectionRadius * collectionRadius
+    );
+  }
+
+  render() {
+    const pulse = 1 + Math.sin(this.age * 4 + this.animationOffset) * 0.1;
+    const bobY = Math.sin(this.age * 3 + this.animationOffset) * 3;
+    const size = this.radius * pulse;
+    const drawY = this.y + bobY;
+
+    context.save();
+    context.beginPath();
+    context.moveTo(this.x, drawY - size);
+    context.lineTo(this.x + size * 0.7, drawY);
+    context.lineTo(this.x, drawY + size);
+    context.lineTo(this.x - size * 0.7, drawY);
+    context.closePath();
+    context.fillStyle = "#52f2bd";
+    context.shadowColor = "rgba(68, 255, 198, 0.9)";
+    context.shadowBlur = 16;
+    context.fill();
+    context.lineWidth = 1.5;
+    context.strokeStyle = "rgba(210, 255, 242, 0.9)";
+    context.stroke();
+    context.restore();
+  }
+}
+
+const xpGems = [];
+const collectionFlashes = [];
+let totalXP = 0;
+
+function updateXPGems(deltaTime) {
+  for (let index = xpGems.length - 1; index >= 0; index -= 1) {
+    const gem = xpGems[index];
+    gem.update(deltaTime);
+
+    if (gem.isTouchingPlayer()) {
+      totalXP += 1;
+      xpCounter.textContent = `XP: ${totalXP}`;
+      collectionFlashes.push({
+        x: gem.x,
+        y: gem.y,
+        radius: gem.radius,
+        remaining: COLLECTION_FLASH_DURATION,
+      });
+      xpGems.splice(index, 1);
+      continue;
+    }
+
+    if (gem.isExpired()) {
+      xpGems.splice(index, 1);
+    }
+  }
+}
+
+function drawXPGems() {
+  for (const gem of xpGems) {
+    gem.render();
+  }
+}
+
+/* --------------------------------------------------------------------------
    Automatic weapon and bullets
    A bullet records its direction when fired, so its path remains straight even
    while the target and player continue moving.
@@ -363,6 +461,7 @@ function updateBullets(deltaTime) {
       bullets.splice(bulletIndex, 1);
 
       if (enemy.takeHit()) {
+        xpGems.push(new XPGem(enemy.x, enemy.y));
         enemies.splice(enemyIndex, 1);
       }
 
@@ -410,6 +509,39 @@ function drawHitFlashes() {
   }
 }
 
+function updateCollectionFlashes(deltaTime) {
+  for (let index = collectionFlashes.length - 1; index >= 0; index -= 1) {
+    collectionFlashes[index].remaining -= deltaTime;
+
+    if (collectionFlashes[index].remaining <= 0) {
+      collectionFlashes.splice(index, 1);
+    }
+  }
+}
+
+function drawCollectionFlashes() {
+  for (const flash of collectionFlashes) {
+    const progress = 1 - flash.remaining / COLLECTION_FLASH_DURATION;
+
+    context.save();
+    context.beginPath();
+    context.arc(
+      flash.x,
+      flash.y,
+      flash.radius * (1 + progress * 1.5),
+      0,
+      Math.PI * 2
+    );
+    context.globalAlpha = 1 - progress;
+    context.strokeStyle = "#7dffda";
+    context.lineWidth = 3;
+    context.shadowColor = "rgba(68, 255, 198, 0.95)";
+    context.shadowBlur = 14;
+    context.stroke();
+    context.restore();
+  }
+}
+
 /* --------------------------------------------------------------------------
    Rendering
    -------------------------------------------------------------------------- */
@@ -418,9 +550,11 @@ function render() {
   context.clearRect(0, 0, viewport.width, viewport.height);
   drawBackground();
   drawGrid();
+  drawXPGems();
   drawEnemies();
   drawBullets();
   drawHitFlashes();
+  drawCollectionFlashes();
   drawPlayer();
 }
 
@@ -531,7 +665,9 @@ function gameLoop(currentTime) {
   updateEnemies(deltaTime);
   updateWeapon(deltaTime);
   updateBullets(deltaTime);
+  updateXPGems(deltaTime);
   updateHitFlashes(deltaTime);
+  updateCollectionFlashes(deltaTime);
   render();
   requestAnimationFrame(gameLoop);
 }
@@ -552,4 +688,3 @@ function randomBetween(minimum, maximum) {
 
 resizeCanvas();
 requestAnimationFrame(gameLoop);
-
